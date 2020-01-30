@@ -6,13 +6,12 @@ Created on Sat Jan 25 04:59:01 2020
 @author: xuncui
 """
 
-import dash_core_components as dcc
 import dash_html_components as html
 import base64
 from dash.dependencies import Input, Output
 from app import app
-from Pages import HHR_Data,NZX
-from utils import web_tab,get_menu
+from Pages import HHR_Data,NZX,EIEP
+from utils import web_tab#,get_menu
 
 
 
@@ -54,8 +53,11 @@ app.layout = html.Div([
 def display_page(tab):
     if tab == 'tab-1':
         return NZX.layout
+    elif tab =='tab-2':
+        return EIEP.layout
     else:
         return HHR_Data.layout
 
 if __name__ == '__main__':
-    app.run_server(debug=True,port=8030)
+    #app.run_server(debug=False,host = '0.0.0.0',port=8030)
+    app.run_server(debug=False,host = '192.168.1.68',port=8030)
