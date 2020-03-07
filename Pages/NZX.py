@@ -7,6 +7,7 @@ Created on Sat Jan 25 05:34:11 2020
 """
 
 import dash_core_components as dcc
+import dash_daq as daq
 import dash_html_components as html
 from dash.dependencies import Input, Output
 import plotly.graph_objs as go
@@ -126,7 +127,9 @@ if len(gr_150['RECONPERIOD'].unique())!=len(gr_150):
 global av080_av120_merge_V2
 AV080_groupby = AV080.groupby(by=['RECONPERIOD','Revision_type'],as_index=False)['TOTAL','ACTUALS'].sum()
 
-AV120 = pd.read_sql_query("select * from AV120",connection)
+#AV120 = pd.read_sql_query("select * from AV120",connection)
+av120_detail = pd.read_sql_query("select * from AV120_Detailed",connection)
+AV120 = av120_detail.groupby(by = ['Revision_type','RECONPERIOD','NETWORK','GXP'],as_index=False)['TOTAL'].sum()
 AV120_groupby = AV120.groupby(by=['RECONPERIOD','Revision_type'],as_index=False)['TOTAL'].sum()
 
 asbilled_period = []
@@ -141,9 +144,14 @@ av080_av120_merge = pd.merge(AV080_groupby,AV120_groupby,how='left',left_on = ['
                             right_on = ['AsBilled_period','Revision_type'])
 
 av080_av120_merge_V2 = av080_av120_merge[av080_av120_merge['Asbilled_vol'].notnull()].copy()
+av080_av120_merge_V2['Ratio'] = av080_av120_merge['TOTAL']/av080_av120_merge['Asbilled_vol']
 av080_av120_merge_V2.sort_values(by = ['RECONPERIOD','Revision_type'],inplace = True)
 av080_av120_merge_V2.reset_index(drop = True,inplace = True)
-#av080_av120_merge_V2['HE_percent'] = av080_av120_merge_V2['ACTUALS']/av080_av120_merge_V2['TOTAL']
+av080_av120_merge_V2['variance'] = av080_av120_merge_V2['Asbilled_vol']-av080_av120_merge_V2['TOTAL']
+ym = []
+for i,row in enumerate(av080_av120_merge_V2.itertuples()):
+    ym.append(datetime.strptime(row.RECONPERIOD,"%Y-%m-%d").strftime("%y-%m"))
+av080_av120_merge_V2['YM'] = ym
 #============================AV080 VS AV120 END======================
 
 
@@ -280,19 +288,39 @@ layout = html.Div([
                     ], className = 'row'),
     html.Br(),
     html.Div([
-            dcc.Dropdown(
-                    id = 'AV080_120_comparison',
-                    options=[
-                            {'label':'M0','value':'M0'},
-                            {'label':'M1','value':'M1'},
-                            {'label':'M3','value':'M3'},
-                            {'label':'M7','value':'M7'},
-                            {'label':'M14','value':'M14'}
-                            ],
-                    value = 'M0',
-                    ),
-            dcc.Graph(id = 'AV080_120_comparison_Graph')
-            ]),
+            html.Div([    
+                    dcc.Dropdown(
+                            id = 'AV080_120_comparison',
+                            options=[
+                                    {'label':'M0','value':'M0'},
+                                    {'label':'M1','value':'M1'},
+                                    {'label':'M3','value':'M3'},
+                                    {'label':'M7','value':'M7'},
+                                    {'label':'M14','value':'M14'}
+                                    ],
+                            value = 'M0',),
+
+                    dcc.Graph(id = 'AV080_120_comparison_Graph'),
+                    ],className = 'six columns'),
+            html.Div([
+                    dcc.Graph(id = 'AV080_120_variance_graph'),
+                    dcc.RangeSlider(
+                            id = 'av080_av120_slider_range',
+                            #min=0,
+                            #max = 14,
+                            #marks = {i:'{}'.format(i) for i in list(av080_av120_merge_V2['RECONPERIOD'].unique())[0:14]},
+                            value=[0,5],
+                            ),
+
+                    daq.LEDDisplay(
+                            id = 'my-LED_display',
+                            label='Default',
+                            value=0,
+                            color = "#FF5E5E"
+                            ),
+                    ],
+                    className = 'six columns'),
+            ], className = 'row'),
     html.Br(),
     html.Div([
             dcc.Dropdown(
@@ -495,3 +523,78 @@ def update_figure4(drop_down_gr010_av080):
                             ), 
             }
         
+                            
+@app.callback(
+        Output('AV080_120_variance_graph','figure'),
+        [Input("AV080_120_comparison","value")])
+
+def update_figure5(av080_120_comparison):
+    if av080_120_comparison is None:
+        temp_filtered_df_av080_120_comp = av080_av120_merge_V2[av080_av120_merge_V2['Revision_type']=='M0'].copy()
+        #temp_filtered_df = av080_av120_merge_V2.copy()
+    else:
+        temp_filtered_df_av080_120_comp = av080_av120_merge_V2[av080_av120_merge_V2['Revision_type']==str(av080_120_comparison)].copy()
+        #temp_filtered_df_av080_120_comp = av080_av120_merge_V2[av080_av120_merge_V2['Revision_type']=='M1'].copy()
+    return {
+            'data':[
+                            go.Bar(
+                                    x= list(temp_filtered_df_av080_120_comp['RECONPERIOD']), y= list(temp_filtered_df_av080_120_comp['variance']),
+                                    #offset = 0,
+                                    #width = 1,
+                                    #name="OP",
+                                    #line = {"color":"#FF1A11"},
+                                    #mode = "lines",
+                                    name = 'Variance',
+                                    marker={                                            
+                                            "color": "#FF5E5E",
+                                            "line": {
+                                                    "color": "#FF5E5E",
+                                                    "width": 1,
+                                                        }}),],
+
+                            "layout": go.Layout(
+                                                title = 'AV080 VS AV120 variance',
+                                                autosize=False,
+                                                bargap=0.5,
+                                                xaxis = dict(
+                                                        title = 'RECONPERIOD',
+                                                        ),
+                                                yaxis = dict(
+                                                        title = '',
+                                                        ),
+                                                #barmode="group"
+                                                ),
+            }
+#min=0,
+                            #max = 14,
+                            #marks = {i:'{}'.format(i) for i in list(av080_av120_merge_V2['RECONPERIOD'].unique())[0:14]},
+@app.callback(
+        [Output('av080_av120_slider_range','marks'),
+         Output('av080_av120_slider_range','max'),
+         Output('av080_av120_slider_range','min')],
+        [Input('AV080_120_comparison','value')]       
+        )
+def update_figure6(AV080_120_comparison):
+    temp_led_df = av080_av120_merge_V2[av080_av120_merge_V2['Revision_type']==str(AV080_120_comparison)].copy()
+    temp_led_df.sort_values(by = ['RECONPERIOD'],ascending=True,inplace = True)
+    range_df = list(temp_led_df['YM'].unique())
+    #marks = {i:range_df[i] for i in range(len(range_df))}
+    #return [{str(i): {i: range_df[i], 'style': {'text-orientation': 'sideways'}} for i in range(len(range_df))},len(range_df),0]
+    return [{i:range_df[i] for i in range(len(range_df))},len(range_df),0]
+                                
+@app.callback(
+        Output('my-LED_display','value'),
+        [Input('AV080_120_comparison','value'),
+         Input('av080_av120_slider_range','value')]       
+        )
+def update_figure7(AV080_120_comparison,av080_av120_slider_range):
+    temp_led_df = av080_av120_merge_V2[av080_av120_merge_V2['Revision_type']==str(AV080_120_comparison)].copy()
+    temp_led_df.sort_values(by = ['RECONPERIOD'],ascending=True,inplace = True)
+    #range_of_year = list(temp_led_df['RECONPERIOD'].unique())[0:int(av080_av120_slider_range)]
+    range_of_year = list(temp_led_df['RECONPERIOD'].unique())[av080_av120_slider_range[0]:av080_av120_slider_range[1]]
+    temp_led_df2 = temp_led_df[temp_led_df['RECONPERIOD'].isin(range_of_year)]
+    try:
+        led_val = int(np.nansum(temp_led_df2['variance']))
+    except:
+        led_val = np.nan
+    return str(led_val)
