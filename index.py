@@ -10,7 +10,7 @@ import dash_html_components as html
 import base64
 from dash.dependencies import Input, Output
 from app import app
-from Pages import HHR_Data,NZX,EIEP
+from Pages import HHR_Data,NZX,EIEP,SWITCHING
 from utils import web_tab#,get_menu
 
 
@@ -55,6 +55,10 @@ def display_page(tab):
         return NZX.layout
     elif tab =='tab-2':
         return EIEP.layout
+    elif tab =='tab-3':
+        return HHR_Data.layout
+    elif tab=='tab-4':
+        return SWITCHING.layout
     else:
         return HHR_Data.layout
 
